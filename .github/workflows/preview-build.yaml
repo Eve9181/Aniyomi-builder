@@ -1,0 +1,102 @@
+name: preview build
+run-name: preview Job
+
+on:
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: "Git repository URL"
+        required: true
+        default: "https://github.com/aniyomiorg/aniyomi"
+      branch:
+        description: "Branch name"
+        required: false
+        default: "main"
+      appName:
+        description: "New app name"
+        required: false
+      applicationId:
+        description: "New application ID"
+        required: false
+      jdkVersion:
+        description: "OpenJDK version to use: 8 / 11 / 17 etc."
+        required: false
+        default: "17"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: ${{ github.event.inputs.jdkVersion }}
+
+      - name: Clone project
+        run: git clone -b ${{ github.event.inputs.branch }} ${{ github.event.inputs.repository }} workspace
+
+      - name: Change App Name
+        run: |
+          set -e
+          cd workspace
+          if [ -n "${{ github.event.inputs.appName }}" ]; then
+            sed -i 's|<string name="app_name" translatable="false">.*</string>|<string name="app_name" translatable="false">${{ github.event.inputs.appName }}</string>|' i18n/src/commonMain/moko-resources/base/strings.xml
+          fi
+
+      - name: Change Application ID
+        run: |
+          set -e
+          cd workspace
+          if [ -n "${{ github.event.inputs.applicationId }}" ]; then
+            sed -i 's|applicationId = ".*"|applicationId = "${{ github.event.inputs.applicationId }}"|' app/build.gradle.kts
+          fi
+
+      - name: Build APK
+        working-directory: ./workspace
+        run: |
+          if [ ! -f "gradlew" ]; then gradle wrapper; fi
+          chmod +x gradlew
+          ./gradlew assembleStandardPreview --stacktrace
+
+      - name: Count commits
+        run: |
+          set -e
+          cd workspace
+          commit_count=$(git rev-list --count HEAD)
+          echo "COMMIT_COUNT=$commit_count" >> $GITHUB_ENV
+
+      - name: Upload APK 1
+        uses: actions/upload-artifact@v4
+        with:
+          path: ./workspace/app/build/outputs/apk/standard/preview/app-standard-universal-preview.apk
+          name: app-standard-universal-${{ env.COMMIT_COUNT }}.apk
+          retention-days: 3
+
+      - name: Upload APK 2
+        uses: actions/upload-artifact@v4
+        with:
+          path: ./workspace/app/build/outputs/apk/standard/preview/app-standard-arm64-v8a-preview.apk
+          name: app-standard-arm64-v8a-r${{ env.COMMIT_COUNT }}.apk
+          retention-days: 3
+
+      - name: Upload APK 3
+        uses: actions/upload-artifact@v4
+        with:
+          path: ./workspace/app/build/outputs/apk/standard/preview/app-standard-armeabi-v7a-preview.apk
+          name: app-standard-armeabi-v7a-r${{ env.COMMIT_COUNT }}.apk
+          retention-days: 3
+
+      - name: Upload APK 4
+        uses: actions/upload-artifact@v4
+        with:
+          path: ./workspace/app/build/outputs/apk/standard/preview/app-standard-x86-preview.apk
+          name: app-standard-x86-r${{ env.COMMIT_COUNT }}.apk
+          retention-days: 3
+
+      - name: Upload APK 5
+        uses: actions/upload-artifact@v4
+        with:
+          path: ./workspace/app/build/outputs/apk/standard/preview/app-standard-x86_64-preview.apk
+          name: app-standard-x86_64-r${{ env.COMMIT_COUNT }}.apk
+          retention-days: 3
